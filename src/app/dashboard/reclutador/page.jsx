@@ -19,6 +19,9 @@ export default function ReclutadorDashboard() {
   const [ofertasCreadas, setOfertas] = useState([]);
   const [allProfiles, setAllProfiles] = useState([]);
   const [aplicaciones, setAplicaciones] = useState([]);
+  const [filtroFecha, setFiltroFecha] = useState("todos");
+  const [ordenScore, setOrdenScore] = useState("desc");
+  const [filtroEncuesta, setFiltroEncuesta] = useState("todas");
 
   useEffect(() => {
     const user = db.getCurrentUser();
@@ -36,7 +39,7 @@ export default function ReclutadorDashboard() {
     ofertasMap[o.id] = o.titulo;
   });
 
-  function profileToCandidate(p, score, scoreColor, ofertaId) {
+  function profileToCandidate(p, score, scoreColor, ofertaId, apl) {
     const name = p.nombre || "";
     return {
       id: p.id,
@@ -53,22 +56,51 @@ export default function ReclutadorDashboard() {
       score: score || 0,
       scoreColor: scoreColor || "yellow",
       ofertaId: ofertaId || null,
+      createdAt: apl?.createdAt || null,
+      tieneRespuestas: apl?.respuestas?.length > 0,
     };
   }
 
-  const filteredCandidatos = selectedOfertaId
-    ? allProfiles.filter((p) =>
-        aplicaciones.some((a) => a.candidatoId === p.id && a.ofertaId === selectedOfertaId)
-      ).map((p) => {
-        const apl = aplicaciones.find((a) => a.candidatoId === p.id && a.ofertaId === selectedOfertaId);
-        return profileToCandidate(p, apl?.score, (apl?.score || 0) >= 80 ? "green" : "yellow", selectedOfertaId);
-      })
+  const candidatosConDatos = selectedOfertaId
+    ? allProfiles
+        .map((p) => {
+          const apl = aplicaciones.find((a) => a.candidatoId === p.id && a.ofertaId === selectedOfertaId);
+          if (!apl) return null;
+          return profileToCandidate(p, apl.score, (apl.score || 0) >= 80 ? "green" : "yellow", selectedOfertaId, apl);
+        })
+        .filter(Boolean)
     : allProfiles.map((p) => {
         const mejorApl = aplicaciones
           .filter((a) => a.candidatoId === p.id)
           .sort((a, b) => b.score - a.score)[0];
-        return profileToCandidate(p, mejorApl?.score, (mejorApl?.score || 0) >= 80 ? "green" : "yellow", mejorApl?.ofertaId);
+        return profileToCandidate(p, mejorApl?.score, (mejorApl?.score || 0) >= 80 ? "green" : "yellow", mejorApl?.ofertaId, mejorApl);
       });
+
+  const ahora = new Date();
+  const inicioHoy = new Date(ahora.getFullYear(), ahora.getMonth(), ahora.getDate());
+  const inicioSemana = new Date(inicioHoy);
+  inicioSemana.setDate(inicioSemana.getDate() - 7);
+  const inicioMes = new Date(ahora.getFullYear(), ahora.getMonth(), 1);
+
+  const filteredCandidatos = candidatosConDatos
+    .filter((c) => {
+      if (filtroFecha === "todos") return true;
+      if (!c.createdAt) return true;
+      const d = new Date(c.createdAt);
+      if (filtroFecha === "hoy") return d >= inicioHoy;
+      if (filtroFecha === "semana") return d >= inicioSemana;
+      if (filtroFecha === "mes") return d >= inicioMes;
+      return true;
+    })
+    .filter((c) => {
+      if (filtroEncuesta === "todas") return true;
+      if (filtroEncuesta === "respondidas") return c.tieneRespuestas;
+      if (filtroEncuesta === "no-respondidas") return !c.tieneRespuestas;
+      return true;
+    })
+    .sort((a, b) => {
+      return ordenScore === "desc" ? b.score - a.score : a.score - b.score;
+    });
 
   const handleViewAnswers = (candidato) => {
     setSelectedCandidato(candidato);
@@ -159,11 +191,54 @@ export default function ReclutadorDashboard() {
         </header>
 
         {activeTab === "ranking" && !selectedOfertaId && (
-          <CandidateTable
-            candidatos={filteredCandidatos}
-            ofertasMap={ofertasMap}
-            onViewAnswers={handleViewAnswers}
-          />
+          <>
+            <div className="px-8 pt-6 pb-2 flex flex-wrap items-center gap-2">
+              <span className="text-xs font-semibold text-slate-500 uppercase tracking-wider mr-1">
+                Fecha:
+              </span>
+              {["hoy", "semana", "mes", "todos"].map((f) => (
+                <button
+                  key={f}
+                  onClick={() => setFiltroFecha(f)}
+                  className={`px-3 py-1.5 rounded-lg text-xs font-medium transition ${
+                    filtroFecha === f
+                      ? "bg-indigo-100 text-indigo-700"
+                      : "bg-slate-100 text-slate-500 hover:bg-slate-200"
+                  }`}
+                >
+                  {f === "hoy" ? "Hoy" : f === "semana" ? "Semana" : f === "mes" ? "Mes" : "Todos"}
+                </button>
+              ))}
+              <span className="text-xs font-semibold text-slate-500 uppercase tracking-wider ml-4 mr-1">
+                Score:
+              </span>
+              <select
+                value={ordenScore}
+                onChange={(e) => setOrdenScore(e.target.value)}
+                className="px-3 py-1.5 rounded-lg text-xs font-medium bg-slate-100 text-slate-600 border-0 focus:outline-none focus:ring-2 focus:ring-indigo-500"
+              >
+                <option value="desc">Mayor → Menor</option>
+                <option value="asc">Menor → Mayor</option>
+              </select>
+              <span className="text-xs font-semibold text-slate-500 uppercase tracking-wider ml-4 mr-1">
+                Encuesta:
+              </span>
+              <select
+                value={filtroEncuesta}
+                onChange={(e) => setFiltroEncuesta(e.target.value)}
+                className="px-3 py-1.5 rounded-lg text-xs font-medium bg-slate-100 text-slate-600 border-0 focus:outline-none focus:ring-2 focus:ring-indigo-500"
+              >
+                <option value="todas">Todas</option>
+                <option value="respondidas">Respondidas</option>
+                <option value="no-respondidas">No respondidas</option>
+              </select>
+            </div>
+            <CandidateTable
+              candidatos={filteredCandidatos}
+              ofertasMap={ofertasMap}
+              onViewAnswers={handleViewAnswers}
+            />
+          </>
         )}
 
         {activeTab === "ofertas" && !selectedOfertaId && (
@@ -252,11 +327,54 @@ export default function ReclutadorDashboard() {
         )}
 
         {activeTab === "ranking" && selectedOfertaId && (
-          <CandidateTable
-            candidatos={filteredCandidatos}
-            ofertasMap={ofertasMap}
-            onViewAnswers={handleViewAnswers}
-          />
+          <>
+            <div className="px-8 pt-6 pb-2 flex flex-wrap items-center gap-2">
+              <span className="text-xs font-semibold text-slate-500 uppercase tracking-wider mr-1">
+                Fecha:
+              </span>
+              {["hoy", "semana", "mes", "todos"].map((f) => (
+                <button
+                  key={f}
+                  onClick={() => setFiltroFecha(f)}
+                  className={`px-3 py-1.5 rounded-lg text-xs font-medium transition ${
+                    filtroFecha === f
+                      ? "bg-indigo-100 text-indigo-700"
+                      : "bg-slate-100 text-slate-500 hover:bg-slate-200"
+                  }`}
+                >
+                  {f === "hoy" ? "Hoy" : f === "semana" ? "Semana" : f === "mes" ? "Mes" : "Todos"}
+                </button>
+              ))}
+              <span className="text-xs font-semibold text-slate-500 uppercase tracking-wider ml-4 mr-1">
+                Score:
+              </span>
+              <select
+                value={ordenScore}
+                onChange={(e) => setOrdenScore(e.target.value)}
+                className="px-3 py-1.5 rounded-lg text-xs font-medium bg-slate-100 text-slate-600 border-0 focus:outline-none focus:ring-2 focus:ring-indigo-500"
+              >
+                <option value="desc">Mayor → Menor</option>
+                <option value="asc">Menor → Mayor</option>
+              </select>
+              <span className="text-xs font-semibold text-slate-500 uppercase tracking-wider ml-4 mr-1">
+                Encuesta:
+              </span>
+              <select
+                value={filtroEncuesta}
+                onChange={(e) => setFiltroEncuesta(e.target.value)}
+                className="px-3 py-1.5 rounded-lg text-xs font-medium bg-slate-100 text-slate-600 border-0 focus:outline-none focus:ring-2 focus:ring-indigo-500"
+              >
+                <option value="todas">Todas</option>
+                <option value="respondidas">Respondidas</option>
+                <option value="no-respondidas">No respondidas</option>
+              </select>
+            </div>
+            <CandidateTable
+              candidatos={filteredCandidatos}
+              ofertasMap={ofertasMap}
+              onViewAnswers={handleViewAnswers}
+            />
+          </>
         )}
       </main>
 

@@ -75,6 +75,7 @@ export function createOferta(data = {}) {
     skills: data.skills ?? [],
     requisitos: data.requisitos ?? [],
     preguntas: data.preguntas ?? [],
+    timeLimit: data.timeLimit ?? null,
     createdAt: data.createdAt ?? new Date().toISOString(),
     activa: data.activa ?? true,
   };

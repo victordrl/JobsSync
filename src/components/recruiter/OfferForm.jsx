@@ -51,7 +51,7 @@ export function OfferForm() {
   const [preguntaTipo, setPreguntaTipo] = useState("texto");
   const [preguntaOpciones, setPreguntaOpciones] = useState([]);
   const [opcionInput, setOpcionInput] = useState("");
-  const [preguntaTimeLimit, setPreguntaTimeLimit] = useState("");
+  const [timeLimit, setTimeLimit] = useState("");
 
   const handleChange = (e) => {
     setForm({ ...form, [e.target.name]: e.target.value });
@@ -99,13 +99,10 @@ export function OfferForm() {
     const t = (texto || preguntaTexto).trim();
     if (!t) return;
 
-    const timeLimit = preguntaTimeLimit ? parseInt(preguntaTimeLimit, 10) : null;
-
     const nueva = {
       id: `p-${Date.now()}`,
       texto: t,
       tipo: preguntaTipo,
-      timeLimit,
       ...(preguntaTipo === "multiple" && preguntaOpciones.length > 0 ? { opciones: [...preguntaOpciones] } : {}),
     };
 
@@ -113,7 +110,6 @@ export function OfferForm() {
     setPreguntaTexto("");
     setPreguntaOpciones([]);
     setOpcionInput("");
-    setPreguntaTimeLimit("");
     setShowPreguntasSuggestions(false);
   };
 
@@ -134,6 +130,7 @@ export function OfferForm() {
       descripcion: form.descripcion,
       skills,
       requisitos,
+      timeLimit: timeLimit ? parseInt(timeLimit, 10) : null,
       preguntas: preguntas.map((p) =>
         createPregunta({
           id: p.id,
@@ -377,6 +374,21 @@ export function OfferForm() {
       <GlassCard className="p-6 space-y-4">
         <h3 className="text-lg font-bold text-slate-800">Preguntas para candidatos</h3>
 
+        <div className="flex items-center gap-2">
+          <label className="text-sm font-semibold text-slate-700 whitespace-nowrap">
+            Tiempo límite total:
+          </label>
+          <input
+            type="number"
+            min="1"
+            value={timeLimit}
+            onChange={(e) => setTimeLimit(e.target.value)}
+            placeholder="—"
+            className="w-20 px-3 py-2 rounded-xl border border-slate-200 bg-slate-50 text-slate-800 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent transition"
+          />
+          <span className="text-xs text-slate-400">min (opcional, vacío = ilimitado)</span>
+        </div>
+
         {preguntas.length > 0 && (
           <div className="space-y-3">
             {preguntas.map((p, index) => (
@@ -390,11 +402,6 @@ export function OfferForm() {
                       <span className="text-xs px-2 py-0.5 bg-slate-200 text-slate-600 rounded font-medium">
                         {p.tipo === "texto" ? "Texto libre" : p.tipo === "si-no" ? "Sí / No" : "Opción múltiple"}
                       </span>
-                      {p.timeLimit && (
-                        <span className="text-xs px-2 py-0.5 bg-amber-100 text-amber-700 rounded font-medium">
-                          {p.timeLimit} min
-                        </span>
-                      )}
                       {p.opciones && p.opciones.length > 0 && (
                         <span className="text-xs text-slate-500">{p.opciones.length} opciones</span>
                       )}
@@ -451,17 +458,6 @@ export function OfferForm() {
                 <option value="multiple">Opción múltiple</option>
               </select>
               <CaretDown size={16} className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" />
-            </div>
-            <div className="flex items-center gap-1">
-              <input
-                type="number"
-                min="1"
-                value={preguntaTimeLimit}
-                onChange={(e) => setPreguntaTimeLimit(e.target.value)}
-                placeholder="Tiempo"
-                className="w-20 px-3 py-2.5 rounded-xl border border-slate-200 bg-slate-50 text-slate-800 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent transition"
-              />
-              <span className="text-xs text-slate-400 min">min</span>
             </div>
             <Button type="button" variant="primary" size="sm" onClick={() => addPregunta()} disabled={!preguntaTexto.trim()}>
               <Plus size={16} weight="bold" /> Agregar

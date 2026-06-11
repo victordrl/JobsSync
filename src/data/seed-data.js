@@ -80,6 +80,7 @@ export function getSeedOfertas(recrutadorId = "user-admin-1") {
       ubicacion: "Caracas (Híbrido)",
       modalidad: MODALIDADES.HIBRIDO,
       salario: "$2500 - $3500 mensuales",
+      timeLimit: 10,
       descripcion:
         "Buscamos un desarrollador backend con experiencia en Python y frameworks modernos. Conocimiento en IA/ML es un plus.",
       skills: ["Python", "FastAPI", "PostgreSQL"],

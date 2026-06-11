@@ -39,9 +39,15 @@ export default function CandidatoDashboard() {
   const [showNotifDropdown, setShowNotifDropdown] = useState(false);
   const [yaAplico, setYaAplico] = useState(false);
   const [tiempoRestante, setTiempoRestante] = useState(null);
-  const [showPausa, setShowPausa] = useState(false);
   const timerRef = useRef(null);
   const aplicarIniciadoRef = useRef(false);
+  const respuestasRef = useRef(respuestas);
+  const preguntasRef = useRef(preguntas);
+
+  useEffect(() => { respuestasRef.current = respuestas; }, [respuestas]);
+  useEffect(() => { preguntasRef.current = preguntas; }, [preguntas]);
+  const [filtroFecha, setFiltroFecha] = useState("todos");
+  const [ordenScore, setOrdenScore] = useState("desc");
 
   const loadData = useCallback(() => {
     const user = db.getCurrentUser();
@@ -94,14 +100,11 @@ export default function CandidatoDashboard() {
     setPreguntas(preg);
     setModalMode("apply");
 
-    const maxTimeLimit = preg.reduce((max, p) => {
-      return p.timeLimit ? Math.max(max, p.timeLimit) : max;
-    }, 0);
+    const timeLimitMin = oferta?.timeLimit || modalOferta.timeLimit || null;
 
-    if (maxTimeLimit > 0) {
+    if (timeLimitMin > 0) {
       aplicarIniciadoRef.current = false;
-      const segundos = maxTimeLimit * 60;
-      setTiempoRestante(segundos);
+      setTiempoRestante(timeLimitMin * 60);
     } else {
       setTiempoRestante(null);
     }
@@ -116,17 +119,24 @@ export default function CandidatoDashboard() {
       setTiempoRestante((prev) => {
         if (prev <= 1) {
           clearInterval(timerRef.current);
-          handleSubmit(true);
           return 0;
         }
         return prev - 1;
       });
     }, 1000);
 
+    const animName = `timerShrink_${modalOferta?.id}`;
+    if (!document.getElementById(animName) && totalTimeLimit > 0) {
+      const style = document.createElement("style");
+      style.id = animName;
+      style.textContent = `@keyframes ${animName} { from { width: 100%; } to { width: 0%; } }`;
+      document.head.appendChild(style);
+    }
+
     return () => {
       clearInterval(timerRef.current);
     };
-  }, [modalMode, tiempoRestante]);
+  }, [modalMode]);
 
   const formatTime = (secs) => {
     const m = Math.floor(secs / 60);
@@ -143,15 +153,18 @@ export default function CandidatoDashboard() {
 
     clearInterval(timerRef.current);
 
+    const pregActuales = preguntasRef.current;
+    const respActuales = respuestasRef.current;
+
     const aplicacion = createAplicacion({
       candidatoId: profile.id,
       ofertaId: modalOferta.id,
-      respuestas: preguntas.map((p) =>
+      respuestas: pregActuales.map((p) =>
         createRespuesta({
           preguntaId: p.id,
           pregunta: p.texto,
           tipo: p.tipo,
-          respuesta: respuestas[p.id] || "",
+          respuesta: respActuales[p.id] || "",
         })
       ),
       score: modalOferta.match?.score || 0,
@@ -163,7 +176,7 @@ export default function CandidatoDashboard() {
           }
         : { skills: 0, experiencia: 0, softSkills: 0 },
       tiempoRespuesta: tiempoRestante !== null
-        ? (preguntas.reduce((max, p) => Math.max(max, p.timeLimit || 0), 0) * 60) - tiempoRestante
+        ? ((modalOferta.timeLimit || 0) * 60) - tiempoRestante
         : 0,
     });
 
@@ -188,7 +201,7 @@ export default function CandidatoDashboard() {
     setTiempoRestante(null);
   };
 
-  const totalTimeLimit = preguntas.reduce((max, p) => Math.max(max, p.timeLimit || 0), 0);
+  const totalTimeLimit = modalOferta?.timeLimit || 0;
   const timeBarPercent = tiempoRestante !== null && totalTimeLimit > 0
     ? (tiempoRestante / (totalTimeLimit * 60)) * 100
     : null;
@@ -287,13 +300,66 @@ export default function CandidatoDashboard() {
                 />
               </div>
 
-              <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
-                <div className="lg:col-span-2 space-y-6">
-                  <h3 className="text-xl font-bold text-slate-900">
-                    Recomendaciones de IA
-                  </h3>
+              <div className="flex flex-wrap items-center gap-2 mb-4">
+                <span className="text-xs font-semibold text-slate-500 uppercase tracking-wider mr-1">
+                  Fecha:
+                </span>
+                {["hoy", "semana", "mes", "todos"].map((f) => (
+                  <button
+                    key={f}
+                    onClick={() => setFiltroFecha(f)}
+                    className={`px-3 py-1.5 rounded-lg text-xs font-medium transition ${
+                      filtroFecha === f
+                        ? "bg-indigo-100 text-indigo-700"
+                        : "bg-slate-100 text-slate-500 hover:bg-slate-200"
+                    }`}
+                  >
+                    {f === "hoy" ? "Hoy" : f === "semana" ? "Semana" : f === "mes" ? "Mes" : "Todos"}
+                  </button>
+                ))}
+                <span className="text-xs font-semibold text-slate-500 uppercase tracking-wider ml-4 mr-1">
+                  Score:
+                </span>
+                <select
+                  value={ordenScore}
+                  onChange={(e) => setOrdenScore(e.target.value)}
+                  className="px-3 py-1.5 rounded-lg text-xs font-medium bg-slate-100 text-slate-600 border-0 focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                >
+                  <option value="desc">Mayor → Menor</option>
+                  <option value="asc">Menor → Mayor</option>
+                </select>
+              </div>
 
-                  {ofertasConMatch.map((o) => (
+              {(() => {
+                const ahora = new Date();
+                const inicioHoy = new Date(ahora.getFullYear(), ahora.getMonth(), ahora.getDate());
+                const inicioSemana = new Date(inicioHoy);
+                inicioSemana.setDate(inicioSemana.getDate() - 7);
+                const inicioMes = new Date(ahora.getFullYear(), ahora.getMonth(), 1);
+
+                const filtradas = ofertasConMatch.filter((o) => {
+                  if (filtroFecha === "todos") return true;
+                  const created = new Date(o.createdAt || ahora);
+                  if (filtroFecha === "hoy") return created >= inicioHoy;
+                  if (filtroFecha === "semana") return created >= inicioSemana;
+                  if (filtroFecha === "mes") return created >= inicioMes;
+                  return true;
+                });
+
+                const ordenadas = [...filtradas].sort((a, b) => {
+                  const sa = a.match?.score || 0;
+                  const sb = b.match?.score || 0;
+                  return ordenScore === "desc" ? sb - sa : sa - sb;
+                });
+
+                return (
+                  <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
+                    <div className="lg:col-span-2 space-y-6">
+                      <h3 className="text-xl font-bold text-slate-900">
+                        Recomendaciones de IA
+                      </h3>
+
+                      {ordenadas.map((o) => (
                     <OfferCard
                       key={o.id}
                       oferta={{
@@ -304,10 +370,12 @@ export default function CandidatoDashboard() {
                       onClick={() => handleOpenOffer(o)}
                     />
                   ))}
-                </div>
+                    </div>
 
-                <SkillRadar profile={profile} />
-              </div>
+                    <SkillRadar profile={profile} />
+                  </div>
+                );
+              })()}
             </div>
           )}
 
@@ -318,12 +386,12 @@ export default function CandidatoDashboard() {
           )}
 
           {activeTab === "curriculum" && (
-            <div className="animate-fade-in space-y-6">
-              <ProfileInfo profile={profile} />
-              <div className="flex justify-center">
+            <div className="animate-fade-in">
+              <div className="flex flex-col items-center justify-center py-16 gap-6">
+                <p className="text-slate-500 text-lg">Sube o actualiza tu currículum para mantener tu perfil actualizado</p>
                 <button
                   onClick={() => router.push("/upload?replace=true")}
-                  className="px-6 py-3 bg-indigo-600 text-white rounded-xl font-bold hover:bg-indigo-700 shadow-lg transition"
+                  className="px-8 py-4 bg-indigo-600 text-white rounded-xl font-bold hover:bg-indigo-700 shadow-lg transition text-lg"
                 >
                   Volver a cargar CV
                 </button>
@@ -452,14 +520,21 @@ export default function CandidatoDashboard() {
                 </div>
                 <div className="w-full h-2 bg-slate-100 rounded-full overflow-hidden">
                   <div
-                    className={`h-full rounded-full transition-all duration-1000 ${
+                    key={modalOferta?.id || "timer"}
+                    className={`h-full rounded-full ${
                       timeBarPercent > 50
                         ? "bg-green-500"
                         : timeBarPercent > 20
                           ? "bg-yellow-500"
                           : "bg-red-500"
                     }`}
-                    style={{ width: `${timeBarPercent}%` }}
+                    style={{
+                      animation:
+                        totalTimeLimit > 0
+                          ? `timerShrink_${modalOferta?.id} ${totalTimeLimit * 60}s linear forwards`
+                          : undefined,
+                    }}
+                    onAnimationEnd={() => handleSubmit(true)}
                   />
                 </div>
               </div>
