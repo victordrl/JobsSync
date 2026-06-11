@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
+import { useRouter } from "next/navigation";
 import {
   Bell,
   CheckCircle,
@@ -17,32 +18,49 @@ import { SkillRadar } from "@/components/candidate/SkillRadar";
 import { ProfileInfo } from "@/components/candidate/ProfileInfo";
 import { Modal } from "@/components/ui/Modal";
 import { Badge } from "@/components/ui/Badge";
-import { ofertas } from "@/data/ofertas";
+import { useDataService } from "@/hooks/useDataService";
+import { createAplicacion, createRespuesta } from "@/data/schemas";
 
 export default function CandidatoDashboard() {
+  const { db, refresh } = useDataService();
+  const router = useRouter();
   const [activeTab, setActiveTab] = useState("dashboard");
   const [modalOferta, setModalOferta] = useState(null);
   const [modalMode, setModalMode] = useState("detail");
   const [preguntas, setPreguntas] = useState([]);
   const [respuestas, setRespuestas] = useState({});
-  const [ofertasOrdenadas, setOfertasOrdenadas] = useState([]);
+  const [ofertasConMatch, setOfertasConMatch] = useState([]);
   const [stats, setStats] = useState({ topScore: 0, topEmpresa: "", totalSkills: 0, totalOfertas: 0 });
+  const [profile, setProfile] = useState(null);
+  const [notificaciones, setNotificaciones] = useState([]);
 
   useEffect(() => {
-    const ordenadas = [...ofertas].sort((a, b) => b.score - a.score);
-    setOfertasOrdenadas(ordenadas);
+    const user = db.getCurrentUser();
+    if (!user) {
+      router.replace("/login");
+      return;
+    }
 
-    const top = ordenadas[0];
-    const allSkills = new Set(ofertas.flatMap((o) => o.skills));
-    const compatibles = ofertas.filter((o) => o.score >= 70).length;
+    const p = db.getProfileByUserId(user.id);
+    setProfile(p);
+    if (!p) return;
+
+    const ofertas = db.getOfertasConMatch(p.id);
+    setOfertasConMatch(ofertas);
+
+    const top = ofertas[0];
+    const allSkills = new Set(ofertas.flatMap((o) => o.skills || []));
+    const compatibles = ofertas.filter((o) => o.match?.score >= 70).length;
 
     setStats({
-      topScore: top?.score || 0,
+      topScore: top?.match?.score || 0,
       topEmpresa: top?.empresa || "",
       totalSkills: allSkills.size,
       totalOfertas: compatibles,
     });
-  }, []);
+
+    setNotificaciones(db.getNotificaciones(p.id));
+  }, [db]);
 
   const handleOpenOffer = (oferta) => {
     setModalOferta(oferta);
@@ -51,12 +69,8 @@ export default function CandidatoDashboard() {
   };
 
   const handleApply = () => {
-    const raw = localStorage.getItem("ofertas_creadas");
-    if (!raw || !modalOferta) return;
-
-    const creadas = JSON.parse(raw);
-    const creada = creadas.find((c) => c.id === modalOferta.ofertaCreadaId);
-    setPreguntas(creada?.preguntas || []);
+    const oferta = db.getOfertaById(modalOferta.id);
+    setPreguntas(oferta?.preguntas || []);
     setModalMode("apply");
   };
 
@@ -65,26 +79,37 @@ export default function CandidatoDashboard() {
   };
 
   const handleSubmit = () => {
-    const existing = JSON.parse(localStorage.getItem("respuestas_candidato") || "[]");
-    const nueva = {
-      ofertaId: modalOferta?.ofertaCreadaId,
-      ofertaTitulo: modalOferta?.titulo,
-      respuestas: preguntas.map((p) => ({
-        preguntaId: p.id,
-        pregunta: p.texto,
-        tipo: p.tipo,
-        respuesta: respuestas[p.id] || "",
-      })),
-      fecha: new Date().toISOString(),
-    };
-    existing.push(nueva);
-    localStorage.setItem("respuestas_candidato", JSON.stringify(existing));
+    if (!profile || !modalOferta) return;
+
+    const aplicacion = createAplicacion({
+      candidatoId: profile.id,
+      ofertaId: modalOferta.id,
+      respuestas: preguntas.map((p) =>
+        createRespuesta({
+          preguntaId: p.id,
+          pregunta: p.texto,
+          tipo: p.tipo,
+          respuesta: respuestas[p.id] || "",
+        })
+      ),
+      score: modalOferta.match?.score || 0,
+      scoreDetalle: modalOferta.match
+        ? {
+            skills: modalOferta.match.skills,
+            experiencia: modalOferta.match.experiencia,
+            softSkills: modalOferta.match.softSkills,
+          }
+        : { skills: 0, experiencia: 0, softSkills: 0 },
+    });
+
+    db.saveAplicacion(aplicacion);
+    refresh();
     setModalMode("success");
   };
 
   return (
     <div className="flex h-screen overflow-hidden bg-slate-50">
-      <SidebarCandidato activeTab={activeTab} onTabChange={setActiveTab} />
+      <SidebarCandidato activeTab={activeTab} onTabChange={setActiveTab} profile={profile} />
 
       <main className="flex-1 overflow-y-auto">
         <header className="bg-white/80 backdrop-blur-md sticky top-0 z-10 border-b border-slate-200 px-8 py-4 flex justify-between items-center">
@@ -129,10 +154,14 @@ export default function CandidatoDashboard() {
                     Recomendaciones de IA
                   </h3>
 
-                  {ofertasOrdenadas.map((o) => (
+                  {ofertasConMatch.map((o) => (
                     <OfferCard
                       key={o.id}
-                      oferta={o}
+                      oferta={{
+                        ...o,
+                        color: o.match?.score >= 80 ? "green" : o.match?.score >= 60 ? "yellow" : "red",
+                        score: o.match?.score || 0,
+                      }}
                       onClick={() => handleOpenOffer(o)}
                     />
                   ))}
@@ -145,7 +174,7 @@ export default function CandidatoDashboard() {
 
           {activeTab === "perfil" && (
             <div className="animate-fade-in">
-              <ProfileInfo />
+              <ProfileInfo profile={profile} />
             </div>
           )}
         </div>
@@ -166,7 +195,15 @@ export default function CandidatoDashboard() {
         gradientFrom={modalMode === "success" ? "from-emerald-600" : "from-blue-600"}
         gradientTo={modalMode === "success" ? "to-green-600" : "to-indigo-600"}
       >
-        {modalOferta && modalMode === "detail" && (
+        {modalOferta && modalMode === "detail" && (() => {
+          const score = modalOferta.match?.score || 0;
+          const color = score >= 80 ? "green" : score >= 60 ? "yellow" : "red";
+          const profileSkills = profile?.hard_skills?.map((s) => s.nombre.toLowerCase()) || [];
+          const offerSkills = modalOferta.skills || [];
+          const fortalezas = offerSkills.filter((s) => profileSkills.includes(s));
+          const gaps = offerSkills.filter((s) => !profileSkills.includes(s));
+
+          return (
           <>
             <div className="flex items-center justify-center mb-8">
               <div className="text-center">
@@ -176,7 +213,7 @@ export default function CandidatoDashboard() {
                       cx="64"
                       cy="64"
                       r="56"
-                      stroke={modalOferta.color === "green" ? "#dcfce7" : "#fef9c3"}
+                      stroke={color === "green" ? "#dcfce7" : "#fef9c3"}
                       strokeWidth="8"
                       fill="none"
                     />
@@ -184,16 +221,16 @@ export default function CandidatoDashboard() {
                       cx="64"
                       cy="64"
                       r="56"
-                      stroke={modalOferta.color === "green" ? "#22c55e" : "#eab308"}
+                      stroke={color === "green" ? "#22c55e" : "#eab308"}
                       strokeWidth="8"
                       fill="none"
                       strokeDasharray={352}
-                      strokeDashoffset={352 - (modalOferta.score / 100) * 352}
+                      strokeDashoffset={352 - (score / 100) * 352}
                       strokeLinecap="round"
                     />
                   </svg>
                   <span className="absolute inset-0 flex items-center justify-center text-4xl font-bold text-slate-800">
-                    {modalOferta.score}%
+                    {score}%
                   </span>
                 </div>
                 <p className="mt-2 font-bold text-slate-500 uppercase tracking-widest text-xs">
@@ -208,9 +245,9 @@ export default function CandidatoDashboard() {
                   <ThumbsUp size={16} weight="fill" /> Fortalezas
                 </h5>
                 <div className="flex flex-wrap gap-2">
-                  {modalOferta.fortalezas.map((f) => (
+                  {fortalezas.length > 0 ? fortalezas.map((f) => (
                     <Badge key={f} text={f} color="green" />
-                  ))}
+                  )) : <p className="text-sm text-slate-400">Ninguna</p>}
                 </div>
               </div>
               <div>
@@ -218,9 +255,9 @@ export default function CandidatoDashboard() {
                   <WarningCircle size={16} weight="fill" /> Gaps (Faltantes)
                 </h5>
                 <div className="flex flex-wrap gap-2">
-                  {modalOferta.gaps.map((g) => (
+                  {gaps.length > 0 ? gaps.map((g) => (
                     <Badge key={g} text={g} color="red" />
-                  ))}
+                  )) : <p className="text-sm text-slate-400">Ninguno</p>}
                 </div>
               </div>
             </div>
@@ -240,7 +277,8 @@ export default function CandidatoDashboard() {
               </button>
             </div>
           </>
-        )}
+          );
+        })()}
 
         {modalOferta && modalMode === "apply" && (
           <div className="space-y-4">

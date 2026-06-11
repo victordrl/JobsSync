@@ -1,10 +1,38 @@
 "use client";
 
+import { useEffect, useState } from "react";
 import { ArrowLeft, User, Briefcase } from "@phosphor-icons/react";
 import { useRouter } from "next/navigation";
+import { getDataService } from "@/lib/dataService";
 
 export default function RoleSelectionPage() {
   const router = useRouter();
+  const [isChecking, setIsChecking] = useState(true);
+
+  useEffect(() => {
+    const user = getDataService().getCurrentUser();
+    setIsChecking(false);
+    if (user) {
+      if (user.rol === "reclutador") {
+        router.replace("/dashboard/reclutador");
+      } else {
+        const profile = getDataService().getProfileByUserId(user.id);
+        router.replace(profile ? "/dashboard/candidato" : "/upload");
+      }
+    }
+  }, [router]);
+
+  const goToLogin = (rolHint) => {
+    router.push(`/login?rol=${rolHint}`);
+  };
+
+  if (isChecking) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-slate-50">
+        <div className="w-8 h-8 border-4 border-blue-500/30 border-t-blue-500 rounded-full animate-spin"></div>
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen flex items-center justify-center bg-slate-50 relative p-6">
@@ -20,12 +48,12 @@ export default function RoleSelectionPage() {
           Selecciona tu Rol
         </h2>
         <p className="text-slate-500 mb-12 animate-slide-up">
-          Entra a la simulación del prototipo v5.
+          Inicia sesión o regístrate para continuar.
         </p>
 
         <div className="grid grid-cols-1 md:grid-cols-2 gap-8 px-4">
           <button
-            onClick={() => router.push("/upload")}
+            onClick={() => goToLogin("candidato")}
             className="group relative bg-white p-10 rounded-3xl shadow-xl hover:shadow-2xl border border-slate-100 transition-all duration-300 transform hover:-translate-y-2 overflow-hidden text-left animate-slide-up"
             style={{ animationDelay: "0.1s" }}
           >
@@ -48,7 +76,7 @@ export default function RoleSelectionPage() {
           </button>
 
           <button
-            onClick={() => router.push("/dashboard/reclutador")}
+            onClick={() => goToLogin("reclutador")}
             className="group relative bg-white p-10 rounded-3xl shadow-xl hover:shadow-2xl border border-slate-100 transition-all duration-300 transform hover:-translate-y-2 overflow-hidden text-left animate-slide-up"
             style={{ animationDelay: "0.2s" }}
           >

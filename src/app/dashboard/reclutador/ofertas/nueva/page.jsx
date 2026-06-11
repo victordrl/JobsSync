@@ -1,9 +1,21 @@
 "use client";
 
+import { useEffect } from "react";
+import { useRouter } from "next/navigation";
 import { SidebarReclutador } from "@/components/layout/SidebarReclutador";
 import { OfferForm } from "@/components/recruiter/OfferForm";
+import { getDataService } from "@/lib/dataService";
 
 export default function NuevaOfertaPage() {
+  const router = useRouter();
+
+  useEffect(() => {
+    const user = getDataService().getCurrentUser();
+    if (!user || user.rol !== "reclutador") {
+      router.replace("/login");
+    }
+  }, [router]);
+
   return (
     <div className="flex h-screen overflow-hidden bg-slate-50">
       <SidebarReclutador />

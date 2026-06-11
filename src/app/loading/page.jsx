@@ -4,10 +4,18 @@ import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { Brain } from "@phosphor-icons/react";
 import { TerminalSimulator } from "@/components/ui/TerminalSimulator";
+import { getDataService } from "@/lib/dataService";
 
 export default function LoadingPage() {
   const router = useRouter();
   const [ready, setReady] = useState(false);
+
+  useEffect(() => {
+    const user = getDataService().getCurrentUser();
+    if (!user) {
+      router.replace("/login");
+    }
+  }, [router]);
 
   useEffect(() => {
     const timer = setTimeout(() => {

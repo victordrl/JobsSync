@@ -10,8 +10,15 @@ const navItems = [
   { id: "perfil", icon: User, label: "Mi Perfil Parseado" },
 ];
 
-export function SidebarCandidato({ activeTab, onTabChange }) {
+export function SidebarCandidato({ activeTab, onTabChange, profile }) {
   const router = useRouter();
+  const userName = profile?.nombre || "Candidato";
+  const userInitials = userName
+    .split(" ")
+    .map((w) => w[0])
+    .join("")
+    .toUpperCase()
+    .slice(0, 2);
 
   return (
     <aside className="w-72 bg-white border-r border-slate-200 hidden md:flex flex-col z-20">
@@ -53,13 +60,11 @@ export function SidebarCandidato({ activeTab, onTabChange }) {
 
       <div className="p-4 border-t border-slate-100">
         <div className="flex items-center gap-3 p-3 rounded-xl bg-slate-50 border border-slate-100">
-          <img
-            src="https://ui-avatars.com/api/?name=Carlos+Maurera&background=0D8ABC&color=fff"
-            className="w-10 h-10 rounded-full"
-            alt="Carlos Maurera"
-          />
+          <div className="w-10 h-10 rounded-full bg-blue-600 text-white flex items-center justify-center font-bold text-sm">
+            {userInitials}
+          </div>
           <div>
-            <p className="text-sm font-bold text-slate-900">Carlos Maurera</p>
+            <p className="text-sm font-bold text-slate-900">{userName}</p>
             <p className="text-xs text-slate-500">Candidato</p>
           </div>
         </div>

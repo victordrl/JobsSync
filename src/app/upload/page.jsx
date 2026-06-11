@@ -1,11 +1,20 @@
 "use client";
 
+import { useEffect } from "react";
 import { ArrowLeft, CloudArrowUp } from "@phosphor-icons/react";
 import { useRouter } from "next/navigation";
 import { FileDropZone } from "@/components/ui/FileDropZone";
+import { getDataService } from "@/lib/dataService";
 
 export default function UploadPage() {
   const router = useRouter();
+
+  useEffect(() => {
+    const user = getDataService().getCurrentUser();
+    if (!user || user.rol !== "candidato") {
+      router.replace("/login");
+    }
+  }, [router]);
 
   const handleUpload = () => {
     router.push("/loading");

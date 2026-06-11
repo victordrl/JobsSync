@@ -1,10 +1,18 @@
 "use client";
 
+import { useState, useEffect } from "react";
 import { Briefcase, Users, PlusCircle, SignOut } from "@phosphor-icons/react";
 import { useRouter } from "next/navigation";
+import { getDataService } from "@/lib/dataService";
 
 export function SidebarReclutador() {
   const router = useRouter();
+  const [userName, setUserName] = useState("Reclutador");
+
+  useEffect(() => {
+    const user = getDataService().getCurrentUser();
+    if (user) setUserName(user.nombre);
+  }, []);
 
   return (
     <aside className="w-72 bg-slate-900 text-white hidden md:flex flex-col z-20">
@@ -36,6 +44,7 @@ export function SidebarReclutador() {
       </nav>
 
       <div className="p-4 border-t border-slate-700">
+        <p className="text-xs text-slate-500 px-4 mb-2 truncate">{userName}</p>
         <button
           onClick={() => router.push("/")}
           className="w-full flex items-center justify-center gap-2 text-slate-400 hover:text-white text-sm font-medium transition"

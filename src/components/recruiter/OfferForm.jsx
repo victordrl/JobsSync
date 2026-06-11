@@ -5,12 +5,11 @@ import { useRouter } from "next/navigation";
 import { Plus, X, ArrowLeft, Check, ListDashes, CaretDown } from "@phosphor-icons/react";
 import { Button } from "@/components/ui/Button";
 import { GlassCard } from "@/components/ui/GlassCard";
+import { getDataService } from "@/lib/dataService";
+import { createOferta, createPregunta } from "@/data/schemas";
 
-const SKILLS_SUGERIDOS = [
-  "JavaScript", "TypeScript", "Python", "React", "Next.js", "Node.js",
-  "FastAPI", "Django", "PostgreSQL", "MongoDB", "Docker", "AWS",
-  "Tailwind CSS", "GraphQL", "Git", "Agile", "Scrum"
-];
+const db = getDataService();
+const SKILLS_SUGERIDOS = db.getSkillsSorted().map((s) => s.nombre);
 
 const REQUISITOS_SUGERIDOS = [
   "Experiencia mínima 2 años", "Título universitario", "Inglés intermedio",
@@ -120,16 +119,27 @@ export function OfferForm() {
   const handleSubmit = (e) => {
     e.preventDefault();
 
-    const oferta = {
-      ...form,
+    const oferta = createOferta({
+      reclutadorId: db.getCurrentUser()?.id || "unknown",
+      titulo: form.titulo,
+      empresa: form.empresa,
+      ubicacion: form.ubicacion,
+      modalidad: form.modalidad,
+      salario: form.salario,
+      descripcion: form.descripcion,
       skills,
       requisitos,
-      preguntas,
-    };
+      preguntas: preguntas.map((p) =>
+        createPregunta({
+          id: p.id,
+          texto: p.texto,
+          tipo: p.tipo,
+          opciones: p.opciones || [],
+        })
+      ),
+    });
 
-    const existing = JSON.parse(localStorage.getItem("ofertas_creadas") || "[]");
-    existing.push({ ...oferta, id: Date.now() });
-    localStorage.setItem("ofertas_creadas", JSON.stringify(existing));
+    db.saveOferta(oferta);
 
     setSuccess(true);
     setTimeout(() => router.push("/dashboard/reclutador"), 1500);

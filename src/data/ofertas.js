@@ -1,32 +1,26 @@
-export const ofertas = [
-  {
-    id: 1,
-    titulo: "Desarrollador Python Backend (IA)",
-    empresa: "Tech Solutions",
-    ubicacion: "Caracas (Híbrido)",
-    modalidad: "Híbrido",
-    skills: ["Python", "FastAPI", "PostgreSQL"],
-    score: 92,
-    color: "green",
-    fortalezas: ["Python", "FastAPI", "PostgreSQL", "NLP"],
-    gaps: ["AWS (Cloud)", "Docker"],
-    iniciales: "TS",
-    bgColor: "bg-slate-900",
-    ofertaCreadaId: 1,
-  },
-  {
-    id: 2,
-    titulo: "Frontend Developer",
-    empresa: "Web Creativos",
-    ubicacion: "Remoto",
-    modalidad: "Remoto",
-    skills: ["React", "Tailwind"],
-    score: 78,
-    color: "yellow",
-    fortalezas: ["React", "Next.js", "Tailwind CSS"],
-    gaps: ["TypeScript", "GraphQL"],
-    iniciales: "WC",
-    bgColor: "bg-indigo-600",
-    ofertaCreadaId: 2,
-  },
-];
+import { getSeedOfertas } from "./seed-data";
+
+const seedOfertas = getSeedOfertas();
+
+export const ofertas = seedOfertas.map((o, index) => ({
+  id: index + 1,
+  titulo: o.titulo,
+  empresa: o.empresa,
+  ubicacion: o.ubicacion,
+  modalidad: o.modalidad,
+  skills: o.skills,
+  score: index === 0 ? 92 : 78,
+  color: index === 0 ? "green" : "yellow",
+  fortalezas: index === 0
+    ? ["Python", "FastAPI", "PostgreSQL", "NLP"]
+    : ["React", "JavaScript", "Tailwind CSS"],
+  gaps: index === 0 ? ["AWS (Cloud)", "Docker"] : ["TypeScript", "GraphQL"],
+  iniciales: o.empresa
+    .split(" ")
+    .map((w) => w[0])
+    .join("")
+    .toUpperCase()
+    .slice(0, 2),
+  bgColor: index === 0 ? "bg-slate-900" : "bg-indigo-600",
+  ofertaCreadaId: index + 1,
+}));

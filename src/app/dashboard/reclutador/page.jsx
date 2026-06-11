@@ -1,39 +1,74 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
+import { useRouter } from "next/navigation";
 import { Briefcase } from "@phosphor-icons/react";
 import { SidebarReclutador } from "@/components/layout/SidebarReclutador";
 import { CandidateTable } from "@/components/recruiter/CandidateTable";
 import { AnswersModal } from "@/components/recruiter/AnswersModal";
 import { GlassCard } from "@/components/ui/GlassCard";
-import { candidatos, respuestasCandidatos } from "@/data/candidatos";
+import { useDataService } from "@/hooks/useDataService";
 
 export default function ReclutadorDashboard() {
+  const router = useRouter();
+  const { db } = useDataService();
   const [activeTab, setActiveTab] = useState("ranking");
   const [selectedOfertaId, setSelectedOfertaId] = useState(null);
   const [modalOpen, setModalOpen] = useState(false);
   const [selectedCandidato, setSelectedCandidato] = useState(null);
+  const [ofertasCreadas, setOfertas] = useState([]);
+  const [allProfiles, setAllProfiles] = useState([]);
+  const [aplicaciones, setAplicaciones] = useState([]);
 
-  const ofertasCreadas = (() => {
-    if (typeof window !== "undefined") {
-      return JSON.parse(localStorage.getItem("ofertas_creadas") || "[]");
+  useEffect(() => {
+    const user = db.getCurrentUser();
+    if (!user) {
+      router.replace("/login");
+      return;
     }
-    return [];
-  })();
+    setOfertas(db.getOfertas());
+    setAllProfiles(db.getAllProfiles());
+    setAplicaciones(db.getAplicaciones());
+  }, [db, router]);
 
-  const ofertasMap = {
-    1: "Desarrollador Backend Python",
-    2: "Frontend Developer",
-  };
+  const ofertasMap = {};
   ofertasCreadas.forEach((o) => {
     ofertasMap[o.id] = o.titulo;
   });
 
-  const allCandidatos = candidatos;
+  function profileToCandidate(p, score, scoreColor, ofertaId) {
+    const name = p.nombre || "";
+    return {
+      id: p.id,
+      nombre: name,
+      titulo: p.profesion || "",
+      iniciales: name
+        .split(" ")
+        .map((w) => w[0])
+        .join("")
+        .toUpperCase()
+        .slice(0, 2),
+      bgColor: scoreColor === "green" ? "bg-emerald-100" : "bg-amber-100",
+      skills: (p.hard_skills || []).map((s) => s.nombre),
+      score: score || 0,
+      scoreColor: scoreColor || "yellow",
+      ofertaId: ofertaId || null,
+    };
+  }
 
   const filteredCandidatos = selectedOfertaId
-    ? allCandidatos.filter((c) => c.ofertaId === selectedOfertaId)
-    : allCandidatos;
+    ? allProfiles.filter((p) =>
+        aplicaciones.some((a) => a.candidatoId === p.id && a.ofertaId === selectedOfertaId)
+      ).map((p) => {
+        const apl = aplicaciones.find((a) => a.candidatoId === p.id && a.ofertaId === selectedOfertaId);
+        return profileToCandidate(p, apl?.score, (apl?.score || 0) >= 80 ? "green" : "yellow", selectedOfertaId);
+      })
+    : allProfiles.map((p) => {
+        const mejorApl = aplicaciones
+          .filter((a) => a.candidatoId === p.id)
+          .sort((a, b) => b.score - a.score)[0];
+        return profileToCandidate(p, mejorApl?.score, (mejorApl?.score || 0) >= 80 ? "green" : "yellow", mejorApl?.ofertaId);
+      });
 
   const handleViewAnswers = (candidato) => {
     setSelectedCandidato(candidato);
@@ -41,16 +76,31 @@ export default function ReclutadorDashboard() {
   };
 
   const getRespuestas = (candidato) => {
-    return respuestasCandidatos.find(
-      (r) => r.candidatoId === candidato.id && r.ofertaId === (selectedOfertaId || candidato.ofertaId || 0)
+    const apl = aplicaciones.find(
+      (a) =>
+        a.candidatoId === candidato.id &&
+        (a.ofertaId === selectedOfertaId || a.ofertaId === candidato.ofertaId)
     );
+    if (!apl) return null;
+    return {
+      respuestas: apl.respuestas.map((r) => ({
+        preguntaId: r.preguntaId,
+        pregunta: r.pregunta,
+        tipo: r.tipo,
+        respuesta: r.respuesta,
+      })),
+    };
   };
 
   const getCandidatosCount = (ofertaId) => {
-    return allCandidatos.filter((c) => c.ofertaId === ofertaId).length;
+    return aplicaciones.filter((a) => a.ofertaId === ofertaId).length;
   };
 
-  const ofertaTitulo = selectedOfertaId ? ofertasMap[selectedOfertaId] : (selectedCandidato?.ofertaId ? ofertasMap[selectedCandidato.ofertaId] : "");
+  const ofertaTitulo = selectedOfertaId
+    ? ofertasMap[selectedOfertaId]
+    : selectedCandidato?.ofertaId
+      ? ofertasMap[selectedCandidato.ofertaId] || ""
+      : "";
 
   return (
     <div className="flex h-screen overflow-hidden bg-slate-50">
@@ -165,14 +215,14 @@ export default function ReclutadorDashboard() {
                       <div>
                         <p className="text-xs font-semibold text-slate-500 mb-2">Skills</p>
                         <div className="flex flex-wrap gap-1">
-                          {oferta.skills.slice(0, 4).map((skill) => (
+                          {(oferta.skills || []).slice(0, 4).map((skill) => (
                             <span key={skill} className="px-2 py-0.5 bg-indigo-50 text-indigo-600 rounded text-xs font-medium">
                               {skill}
                             </span>
                           ))}
-                          {oferta.skills.length > 4 && (
+                          {(oferta.skills || []).length > 4 && (
                             <span className="px-2 py-0.5 bg-slate-100 text-slate-500 rounded text-xs font-medium">
-                              +{oferta.skills.length - 4}
+                              +{(oferta.skills || []).length - 4}
                             </span>
                           )}
                         </div>
