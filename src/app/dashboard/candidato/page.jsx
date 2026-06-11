@@ -12,6 +12,7 @@ import {
   WarningCircle,
   ArrowsClockwise,
   Clock,
+  Sparkle,
   X,
 } from "@phosphor-icons/react";
 import { SidebarCandidato } from "@/components/layout/SidebarCandidato";
@@ -48,6 +49,13 @@ export default function CandidatoDashboard() {
   useEffect(() => { preguntasRef.current = preguntas; }, [preguntas]);
   const [filtroFecha, setFiltroFecha] = useState("todos");
   const [ordenScore, setOrdenScore] = useState("desc");
+  const [mostrandoAlerta, setMostrandoAlerta] = useState("");
+
+  useEffect(() => {
+    if (!mostrandoAlerta) return;
+    const t = setTimeout(() => setMostrandoAlerta(""), 4000);
+    return () => clearTimeout(t);
+  }, [mostrandoAlerta]);
 
   const loadData = useCallback(async (forceGemini = false) => {
     const user = db.getCurrentUser();
@@ -79,8 +87,10 @@ export default function CandidatoDashboard() {
       }
     }
 
+    setMostrandoAlerta("Calculando compatibilidad con Gemini IA...");
     try {
       ofertas = await db.getMatchesConGemini(p.id);
+      setMostrandoAlerta("Compatibilidad actualizada correctamente");
       db.saveResultadosMatching(
         p.id,
         ofertas.map((o) => ({ ofertaId: o.id, score: o.match.score }))
@@ -246,6 +256,14 @@ export default function CandidatoDashboard() {
 
       <main className="flex-1 overflow-y-auto">
         <header className="bg-white/80 backdrop-blur-md sticky top-0 z-10 border-b border-slate-200 px-8 py-4 flex justify-between items-center">
+          <div className="flex items-center gap-4">
+            {mostrandoAlerta && (
+              <div className="flex items-center gap-2 px-4 py-2 bg-indigo-50 border border-indigo-200 rounded-xl text-sm text-indigo-700 font-medium animate-fade-in">
+                <Sparkle size={16} className="text-indigo-500" weight="fill" />
+                {mostrandoAlerta}
+              </div>
+            )}
+          </div>
           <h2 className="text-2xl font-bold text-slate-800">{headerTitle}</h2>
           <div className="flex items-center gap-3">
             <button
