@@ -49,7 +49,7 @@ export default function CandidatoDashboard() {
   const [filtroFecha, setFiltroFecha] = useState("todos");
   const [ordenScore, setOrdenScore] = useState("desc");
 
-  const loadData = useCallback(() => {
+  const loadData = useCallback(async () => {
     const user = db.getCurrentUser();
     if (!user) {
       router.replace("/login");
@@ -60,7 +60,12 @@ export default function CandidatoDashboard() {
     setProfile(p);
     if (!p) return;
 
-    const ofertas = db.getOfertasConMatch(p.id);
+    let ofertas;
+    try {
+      ofertas = await db.getMatchesConGemini(p.id);
+    } catch {
+      ofertas = db.getOfertasConMatch(p.id);
+    }
     setOfertasConMatch(ofertas);
 
     const top = ofertas[0];

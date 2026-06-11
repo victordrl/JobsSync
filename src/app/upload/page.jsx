@@ -18,7 +18,9 @@ function UploadContent() {
     }
   }, [router]);
 
-  const handleUpload = () => {
+  const handleUpload = (file) => {
+    if (!file) return;
+
     if (isReplace) {
       const user = getDataService().getCurrentUser();
       if (user) {
@@ -28,7 +30,23 @@ function UploadContent() {
         localStorage.setItem("perfiles_candidato", JSON.stringify(profiles));
       }
     }
-    router.push("/loading");
+
+    sessionStorage.setItem(
+      "pending_cv",
+      JSON.stringify({
+        name: file.name,
+        type: file.type,
+        size: file.size,
+        lastModified: file.lastModified,
+      })
+    );
+
+    const reader = new FileReader();
+    reader.onload = (e) => {
+      sessionStorage.setItem("pending_cv_data", e.target.result);
+      router.push("/loading");
+    };
+    reader.readAsDataURL(file);
   };
 
   return (
@@ -51,7 +69,7 @@ function UploadContent() {
           <p className="text-slate-500 mt-2">
             {isReplace
               ? "Tu perfil actual será reemplazado por el nuevo análisis."
-              : "El motor spaCy + Transformers procesará tu documento."}
+              : "Gemini IA analizará tu currículum y extraerá tus habilidades."}
           </p>
         </div>
 
@@ -63,11 +81,13 @@ function UploadContent() {
 
 export default function UploadPage() {
   return (
-    <Suspense fallback={
-      <div className="min-h-screen flex items-center justify-center bg-slate-50">
-        <div className="w-8 h-8 border-4 border-blue-500/30 border-t-blue-500 rounded-full animate-spin"></div>
-      </div>
-    }>
+    <Suspense
+      fallback={
+        <div className="min-h-screen flex items-center justify-center bg-slate-50">
+          <div className="w-8 h-8 border-4 border-blue-500/30 border-t-blue-500 rounded-full animate-spin"></div>
+        </div>
+      }
+    >
       <UploadContent />
     </Suspense>
   );

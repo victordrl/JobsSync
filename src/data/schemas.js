@@ -113,3 +113,29 @@ export function createRespuesta(data = {}) {
     respuesta: data.respuesta ?? "",
   };
 }
+
+export function fromGeminiProfile(geminiData, userId) {
+  return {
+    id: crypto.randomUUID(),
+    userId,
+    filename: "",
+    uploadedAt: new Date().toISOString(),
+    nombre: geminiData.datos_personales.nombre_completo,
+    email: "",
+    telefono: "",
+    profesion: geminiData.datos_personales.profesion_oficio_principal,
+    experiencia_anios: geminiData.resumen_trayectoria.anos_experiencia_total,
+    hard_skills: geminiData.habilidades.hard_skills.map((s) => ({
+      nombre: s,
+      categoria: "general",
+      nivel: "intermedio",
+    })),
+    soft_skills: (geminiData.habilidades.soft_skills || []).map((s) => ({
+      nombre: s,
+      nivel: "alto",
+    })),
+    rawText: "",
+    processorVersion: "gemini-2.5-flash",
+    processingTime: 0,
+  };
+}

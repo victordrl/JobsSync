@@ -5,6 +5,7 @@ import {
   getSeedOfertas,
   getSeedAplicaciones,
 } from "@/data/seed-data";
+import { getMatches } from "./geminiService";
 
 const STORAGE_KEYS = {
   USERS: "app_users",
@@ -218,6 +219,60 @@ class DataService {
         ...o,
         match: this.calcularMatch(profile, o),
       }))
+      .sort((a, b) => b.match.score - a.match.score);
+  }
+
+  async getMatchesConGemini(profileId) {
+    const profile = this.getProfile(profileId);
+    if (!profile) return [];
+
+    const ofertas = this.getOfertas().filter((o) => o.activa);
+
+    const profileData = {
+      candidato_id: profileId,
+      datos_personales: {
+        nombre_completo: profile.nombre,
+        profesion_oficio_principal: profile.profesion,
+      },
+      resumen_trayectoria: {
+        anos_experiencia_total: profile.experiencia_anios,
+        ultimo_cargo: profile.profesion,
+      },
+      habilidades: {
+        hard_skills: profile.hard_skills.map((s) => s.nombre),
+        soft_skills: profile.soft_skills.map((s) => s.nombre),
+      },
+    };
+
+    const ofertasData = ofertas.map((o) => ({
+      oferta_id: o.id,
+      informacion_basica: {
+        titulo_oferta: o.titulo,
+        empresa: o.empresa,
+        ubicacion: o.ubicacion,
+        modalidad: o.modalidad,
+        salario: o.salario || "",
+      },
+      descripcion: o.descripcion || "",
+      skills_requeridos: o.skills || [],
+      requisitos: (o.requisitos || []).join(". "),
+    }));
+
+    const matches = await getMatches(profileData, ofertasData);
+
+    return ofertas
+      .map((o) => {
+        const m = matches.find((match) => match.oferta_id === o.id);
+        return {
+          ...o,
+          match: {
+            score: m?.["%_compatibilidad"] || 0,
+            skills: 0,
+            experiencia: 0,
+            softSkills: 0,
+          },
+        };
+      })
       .sort((a, b) => b.match.score - a.match.score);
   }
 
