@@ -49,7 +49,7 @@ export default function CandidatoDashboard() {
   const [filtroFecha, setFiltroFecha] = useState("todos");
   const [ordenScore, setOrdenScore] = useState("desc");
 
-  const loadData = useCallback(async () => {
+  const loadData = useCallback(async (forceGemini = false) => {
     const user = db.getCurrentUser();
     if (!user) {
       router.replace("/login");
@@ -61,26 +61,50 @@ export default function CandidatoDashboard() {
     if (!p) return;
 
     let ofertas;
+
+    if (!forceGemini) {
+      const cache = db.getResultadosMatching(p.id);
+      if (cache) {
+        const ofertasDb = db.getOfertas().filter((o) => o.activa);
+        ofertas = ofertasDb
+          .map((o) => {
+            const cached = cache.resultados.find((r) => r.ofertaId === o.id);
+            return { ...o, match: { score: cached?.score || 0, skills: 0, experiencia: 0, softSkills: 0 } };
+          })
+          .sort((a, b) => b.match.score - a.match.score);
+        setOfertasConMatch(ofertas);
+        populateStats(ofertas, p);
+        setNotificaciones(db.getNotificaciones(p.id));
+        return;
+      }
+    }
+
     try {
       ofertas = await db.getMatchesConGemini(p.id);
+      db.saveResultadosMatching(
+        p.id,
+        ofertas.map((o) => ({ ofertaId: o.id, score: o.match.score }))
+      );
     } catch {
       ofertas = db.getOfertasConMatch(p.id);
     }
     setOfertasConMatch(ofertas);
+    populateStats(ofertas, p);
+    setNotificaciones(db.getNotificaciones(p.id));
+  }, [db, router]);
 
+  const populateStats = (ofertas, p) => {
+    if (!ofertas.length) return;
     const top = ofertas[0];
     const allSkills = new Set(ofertas.flatMap((o) => o.skills || []));
     const compatibles = ofertas.filter((o) => o.match?.score >= 70).length;
-
     setStats({
       topScore: top?.match?.score || 0,
       topEmpresa: top?.empresa || "",
       totalSkills: allSkills.size,
       totalOfertas: compatibles,
     });
-
-    setNotificaciones(db.getNotificaciones(p.id));
-  }, [db, router]);
+  };
 
   useEffect(() => {
     loadData();
@@ -196,7 +220,7 @@ export default function CandidatoDashboard() {
 
   const handleRefresh = () => {
     refresh();
-    loadData();
+    loadData(true);
   };
 
   const cerrarModal = () => {

@@ -14,6 +14,7 @@ const STORAGE_KEYS = {
   SKILLS_CATALOG: "skills_catalog",
   OFERTAS: "ofertas_creadas",
   APLICACIONES: "aplicaciones",
+  RESULTADOS_MATCHING: "resultados_matching",
 };
 
 function read(key) {
@@ -274,6 +275,36 @@ class DataService {
         };
       })
       .sort((a, b) => b.match.score - a.match.score);
+  }
+
+  // ─── Cache de resultados de matching ─────────────────────
+
+  getResultadosMatching(candidatoId) {
+    const results = read(STORAGE_KEYS.RESULTADOS_MATCHING) || [];
+    const candidatoResults = results.find((r) => r.candidatoId === candidatoId);
+    return candidatoResults || null;
+  }
+
+  saveResultadosMatching(candidatoId, resultados) {
+    const results = read(STORAGE_KEYS.RESULTADOS_MATCHING) || [];
+    const idx = results.findIndex((r) => r.candidatoId === candidatoId);
+    const entry = {
+      candidatoId,
+      resultados,
+      actualizadoAt: new Date().toISOString(),
+    };
+    if (idx >= 0) {
+      results[idx] = entry;
+    } else {
+      results.push(entry);
+    }
+    write(STORAGE_KEYS.RESULTADOS_MATCHING, results);
+  }
+
+  clearResultadosMatching(candidatoId) {
+    const results = read(STORAGE_KEYS.RESULTADOS_MATCHING) || [];
+    const filtered = results.filter((r) => r.candidatoId !== candidatoId);
+    write(STORAGE_KEYS.RESULTADOS_MATCHING, filtered);
   }
 
   // ─── Notificaciones ──────────────────────────────────────

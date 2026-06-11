@@ -68,6 +68,7 @@ export default function LoadingPage() {
         const db = getDataService();
         const profile = fromGeminiProfile(geminiData, user.id);
         db.saveProfile(profile);
+        db.clearResultadosMatching(user.id);
 
         (geminiData.habilidades.hard_skills || []).forEach((s) =>
           db.addSkillToCatalog(s, "general")
