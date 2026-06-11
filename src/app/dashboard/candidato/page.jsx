@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef, useCallback } from "react";
 import { useRouter } from "next/navigation";
 import {
   Bell,
@@ -10,6 +10,9 @@ import {
   Buildings,
   ThumbsUp,
   WarningCircle,
+  ArrowsClockwise,
+  Clock,
+  X,
 } from "@phosphor-icons/react";
 import { SidebarCandidato } from "@/components/layout/SidebarCandidato";
 import { StatCard } from "@/components/ui/StatCard";
@@ -33,8 +36,14 @@ export default function CandidatoDashboard() {
   const [stats, setStats] = useState({ topScore: 0, topEmpresa: "", totalSkills: 0, totalOfertas: 0 });
   const [profile, setProfile] = useState(null);
   const [notificaciones, setNotificaciones] = useState([]);
+  const [showNotifDropdown, setShowNotifDropdown] = useState(false);
+  const [yaAplico, setYaAplico] = useState(false);
+  const [tiempoRestante, setTiempoRestante] = useState(null);
+  const [showPausa, setShowPausa] = useState(false);
+  const timerRef = useRef(null);
+  const aplicarIniciadoRef = useRef(false);
 
-  useEffect(() => {
+  const loadData = useCallback(() => {
     const user = db.getCurrentUser();
     if (!user) {
       router.replace("/login");
@@ -60,26 +69,79 @@ export default function CandidatoDashboard() {
     });
 
     setNotificaciones(db.getNotificaciones(p.id));
-  }, [db]);
+  }, [db, router]);
+
+  useEffect(() => {
+    loadData();
+  }, [loadData]);
 
   const handleOpenOffer = (oferta) => {
     setModalOferta(oferta);
     setModalMode("detail");
     setRespuestas({});
+    setYaAplico(false);
+
+    if (profile) {
+      const aplicaciones = db.getAplicacionesByCandidato(profile.id);
+      const yaExiste = aplicaciones.some((a) => a.ofertaId === oferta.id);
+      setYaAplico(yaExiste);
+    }
   };
 
   const handleApply = () => {
     const oferta = db.getOfertaById(modalOferta.id);
-    setPreguntas(oferta?.preguntas || []);
+    const preg = oferta?.preguntas || [];
+    setPreguntas(preg);
     setModalMode("apply");
+
+    const maxTimeLimit = preg.reduce((max, p) => {
+      return p.timeLimit ? Math.max(max, p.timeLimit) : max;
+    }, 0);
+
+    if (maxTimeLimit > 0) {
+      aplicarIniciadoRef.current = false;
+      const segundos = maxTimeLimit * 60;
+      setTiempoRestante(segundos);
+    } else {
+      setTiempoRestante(null);
+    }
+  };
+
+  useEffect(() => {
+    if (modalMode !== "apply" || tiempoRestante === null) return;
+    if (aplicarIniciadoRef.current) return;
+    aplicarIniciadoRef.current = true;
+
+    timerRef.current = setInterval(() => {
+      setTiempoRestante((prev) => {
+        if (prev <= 1) {
+          clearInterval(timerRef.current);
+          handleSubmit(true);
+          return 0;
+        }
+        return prev - 1;
+      });
+    }, 1000);
+
+    return () => {
+      clearInterval(timerRef.current);
+    };
+  }, [modalMode, tiempoRestante]);
+
+  const formatTime = (secs) => {
+    const m = Math.floor(secs / 60);
+    const s = secs % 60;
+    return `${m}:${s.toString().padStart(2, "0")}`;
   };
 
   const handleSetRespuesta = (preguntaId, valor) => {
     setRespuestas({ ...respuestas, [preguntaId]: valor });
   };
 
-  const handleSubmit = () => {
+  const handleSubmit = (autoEnvio = false) => {
     if (!profile || !modalOferta) return;
+
+    clearInterval(timerRef.current);
 
     const aplicacion = createAplicacion({
       candidatoId: profile.id,
@@ -100,6 +162,9 @@ export default function CandidatoDashboard() {
             softSkills: modalOferta.match.softSkills,
           }
         : { skills: 0, experiencia: 0, softSkills: 0 },
+      tiempoRespuesta: tiempoRestante !== null
+        ? (preguntas.reduce((max, p) => Math.max(max, p.timeLimit || 0), 0) * 60) - tiempoRestante
+        : 0,
     });
 
     db.saveAplicacion(aplicacion);
@@ -107,20 +172,94 @@ export default function CandidatoDashboard() {
     setModalMode("success");
   };
 
+  const handleNotifClick = () => {
+    setShowNotifDropdown(!showNotifDropdown);
+  };
+
+  const handleRefresh = () => {
+    refresh();
+    loadData();
+  };
+
+  const cerrarModal = () => {
+    setModalOferta(null);
+    setModalMode("detail");
+    clearInterval(timerRef.current);
+    setTiempoRestante(null);
+  };
+
+  const totalTimeLimit = preguntas.reduce((max, p) => Math.max(max, p.timeLimit || 0), 0);
+  const timeBarPercent = tiempoRestante !== null && totalTimeLimit > 0
+    ? (tiempoRestante / (totalTimeLimit * 60)) * 100
+    : null;
+
+  const headerTitle =
+    activeTab === "dashboard" ? "Panel de Control" :
+    activeTab === "perfil" ? "Mi Perfil Parseado" :
+    activeTab === "curriculum" ? "Curriculum" : "";
+
   return (
     <div className="flex h-screen overflow-hidden bg-slate-50">
       <SidebarCandidato activeTab={activeTab} onTabChange={setActiveTab} profile={profile} />
 
       <main className="flex-1 overflow-y-auto">
         <header className="bg-white/80 backdrop-blur-md sticky top-0 z-10 border-b border-slate-200 px-8 py-4 flex justify-between items-center">
-          <h2 className="text-2xl font-bold text-slate-800">
-            {activeTab === "dashboard" ? "Panel de Control" : "Mi Perfil"}
-          </h2>
-          <div className="flex items-center gap-4">
-            <button className="p-2 text-slate-400 hover:text-blue-600 transition relative">
-              <Bell size={20} />
-              <span className="absolute top-1 right-1 w-2 h-2 bg-red-500 rounded-full"></span>
+          <h2 className="text-2xl font-bold text-slate-800">{headerTitle}</h2>
+          <div className="flex items-center gap-3">
+            <button
+              onClick={handleRefresh}
+              className="p-2 text-slate-400 hover:text-blue-600 transition"
+              title="Actualizar compatibilidad"
+            >
+              <ArrowsClockwise size={20} weight="bold" />
             </button>
+            <div className="relative">
+              <button
+                onClick={handleNotifClick}
+                className="p-2 text-slate-400 hover:text-blue-600 transition relative"
+                title="Notificaciones"
+              >
+                <Bell size={20} />
+                {notificaciones.length > 0 && (
+                  <span className="absolute -top-0.5 -right-0.5 w-4 h-4 bg-red-500 text-white text-[10px] font-bold rounded-full flex items-center justify-center">
+                    {notificaciones.length > 9 ? "9+" : notificaciones.length}
+                  </span>
+                )}
+              </button>
+              {showNotifDropdown && notificaciones.length > 0 && (
+                <div className="absolute right-0 mt-2 w-72 bg-white rounded-2xl shadow-xl border border-slate-100 overflow-hidden z-50">
+                  <div className="p-3 border-b border-slate-100">
+                    <p className="text-xs font-bold text-slate-500 uppercase tracking-wider">
+                      Nuevas ofertas compatibles
+                    </p>
+                  </div>
+                  <div className="max-h-60 overflow-y-auto">
+                    {notificaciones.map((n) => (
+                      <button
+                        key={n.id}
+                        onClick={() => {
+                          setShowNotifDropdown(false);
+                          handleOpenOffer(n);
+                        }}
+                        className="w-full text-left p-3 hover:bg-slate-50 transition border-b border-slate-50 last:border-0"
+                      >
+                        <p className="text-sm font-semibold text-slate-800">{n.titulo}</p>
+                        <p className="text-xs text-slate-500">{n.empresa}</p>
+                        <span
+                          className={`inline-block mt-1 text-xs font-bold px-2 py-0.5 rounded-full ${
+                            n.match?.score >= 80
+                              ? "bg-green-100 text-green-700"
+                              : "bg-yellow-100 text-yellow-700"
+                          }`}
+                        >
+                          {n.match?.score}% match
+                        </span>
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              )}
+            </div>
           </div>
         </header>
 
@@ -167,7 +306,7 @@ export default function CandidatoDashboard() {
                   ))}
                 </div>
 
-                <SkillRadar />
+                <SkillRadar profile={profile} />
               </div>
             </div>
           )}
@@ -177,12 +316,26 @@ export default function CandidatoDashboard() {
               <ProfileInfo profile={profile} />
             </div>
           )}
+
+          {activeTab === "curriculum" && (
+            <div className="animate-fade-in space-y-6">
+              <ProfileInfo profile={profile} />
+              <div className="flex justify-center">
+                <button
+                  onClick={() => router.push("/upload?replace=true")}
+                  className="px-6 py-3 bg-indigo-600 text-white rounded-xl font-bold hover:bg-indigo-700 shadow-lg transition"
+                >
+                  Volver a cargar CV
+                </button>
+              </div>
+            </div>
+          )}
         </div>
       </main>
 
       <Modal
         isOpen={!!modalOferta}
-        onClose={() => { setModalOferta(null); setModalMode("detail"); }}
+        onClose={cerrarModal}
         title={modalOferta?.titulo ?? ""}
         subtitle={
           modalMode === "detail"
@@ -264,17 +417,23 @@ export default function CandidatoDashboard() {
 
             <div className="mt-8 pt-6 border-t border-slate-100 flex justify-end gap-3">
               <button
-                onClick={() => { setModalOferta(null); setModalMode("detail"); }}
+                onClick={cerrarModal}
                 className="px-5 py-2 text-slate-500 hover:bg-slate-50 rounded-lg font-medium transition"
               >
                 Cerrar
               </button>
-              <button
-                onClick={handleApply}
-                className="px-5 py-2 bg-indigo-600 text-white rounded-lg font-bold hover:bg-indigo-700 shadow-lg hover:shadow-indigo-500/30 transition"
-              >
-                Aplicar Ahora
-              </button>
+              {yaAplico ? (
+                <span className="inline-flex items-center gap-2 px-5 py-2 bg-green-100 text-green-700 rounded-lg font-bold text-sm">
+                  <CheckCircle size={16} weight="fill" /> Ya aplicaste
+                </span>
+              ) : (
+                <button
+                  onClick={handleApply}
+                  className="px-5 py-2 bg-indigo-600 text-white rounded-lg font-bold hover:bg-indigo-700 shadow-lg hover:shadow-indigo-500/30 transition"
+                >
+                  Aplicar Ahora
+                </button>
+              )}
             </div>
           </>
           );
@@ -282,6 +441,30 @@ export default function CandidatoDashboard() {
 
         {modalOferta && modalMode === "apply" && (
           <div className="space-y-4">
+            {tiempoRestante !== null && (
+              <div className="mb-4">
+                <div className="flex items-center justify-between mb-2">
+                  <div className="flex items-center gap-2 text-sm text-slate-600">
+                    <Clock size={16} weight="bold" />
+                    <span className="font-semibold">{formatTime(tiempoRestante)}</span>
+                  </div>
+                  <span className="text-xs text-slate-400">tiempo restante</span>
+                </div>
+                <div className="w-full h-2 bg-slate-100 rounded-full overflow-hidden">
+                  <div
+                    className={`h-full rounded-full transition-all duration-1000 ${
+                      timeBarPercent > 50
+                        ? "bg-green-500"
+                        : timeBarPercent > 20
+                          ? "bg-yellow-500"
+                          : "bg-red-500"
+                    }`}
+                    style={{ width: `${timeBarPercent}%` }}
+                  />
+                </div>
+              </div>
+            )}
+
             {preguntas.length === 0 ? (
               <p className="text-center text-slate-500 py-8">Esta oferta no tiene preguntas de screening.</p>
             ) : (
@@ -349,13 +532,13 @@ export default function CandidatoDashboard() {
 
             <div className="pt-4 border-t border-slate-100 flex justify-end gap-3">
               <button
-                onClick={() => setModalMode("detail")}
+                onClick={() => { setModalMode("detail"); clearInterval(timerRef.current); setTiempoRestante(null); }}
                 className="px-5 py-2 text-slate-500 hover:bg-slate-50 rounded-lg font-medium transition"
               >
                 Volver
               </button>
               <button
-                onClick={handleSubmit}
+                onClick={() => handleSubmit()}
                 className="px-5 py-2 bg-indigo-600 text-white rounded-lg font-bold hover:bg-indigo-700 shadow-lg hover:shadow-indigo-500/30 transition"
               >
                 Enviar Respuestas
@@ -374,7 +557,7 @@ export default function CandidatoDashboard() {
               Tus respuestas han sido enviadas exitosamente. El reclutador las revisará pronto.
             </p>
             <button
-              onClick={() => { setModalOferta(null); setModalMode("detail"); }}
+              onClick={cerrarModal}
               className="mt-4 px-6 py-2.5 bg-indigo-600 text-white rounded-lg font-bold hover:bg-indigo-700 shadow-lg transition"
             >
               Cerrar

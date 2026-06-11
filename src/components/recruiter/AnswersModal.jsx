@@ -1,10 +1,12 @@
 "use client";
 
-import { ChatCircleText, CheckCircle, Textbox } from "@phosphor-icons/react";
+import { ChatCircleText, WarningCircle, CheckCircle, Textbox } from "@phosphor-icons/react";
 import { Modal } from "@/components/ui/Modal";
 
 export function AnswersModal({ isOpen, onClose, candidato, ofertaTitulo, respuestas }) {
   if (!candidato) return null;
+
+  const noAnswers = !respuestas || respuestas.respuestas?.length === 0;
 
   return (
     <Modal
@@ -12,12 +14,20 @@ export function AnswersModal({ isOpen, onClose, candidato, ofertaTitulo, respues
       onClose={onClose}
       title={candidato.nombre}
       subtitle={`${candidato.titulo} — ${ofertaTitulo}`}
-      gradientFrom="from-violet-600"
-      gradientTo="to-indigo-600"
-      icon={<ChatCircleText size={28} weight="bold" />}
+      gradientFrom={noAnswers ? "from-amber-600" : "from-violet-600"}
+      gradientTo={noAnswers ? "to-orange-600" : "to-indigo-600"}
+      icon={
+        noAnswers ? (
+          <WarningCircle size={28} weight="bold" className="text-white" />
+        ) : (
+          <ChatCircleText size={28} weight="bold" />
+        )
+      }
     >
-      {!respuestas || respuestas.respuestas.length === 0 ? (
-        <p className="text-center text-slate-500 py-8">Este candidato aún no ha respondido las preguntas.</p>
+      {noAnswers ? (
+        <p className="text-center text-slate-500 py-8">
+          Este candidato aún no ha respondido las preguntas.
+        </p>
       ) : (
         <div className="space-y-4">
           {respuestas.respuestas.map((r, index) => (

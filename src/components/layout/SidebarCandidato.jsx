@@ -1,13 +1,13 @@
 "use client";
 
-import { useState } from "react";
-import { Brain, SquaresFour, User, ChartBar, SignOut } from "@phosphor-icons/react";
+import { Brain, SquaresFour, User, FileText, SignOut } from "@phosphor-icons/react";
 import { useRouter } from "next/navigation";
 import { cn } from "@/lib/utils";
 
 const navItems = [
   { id: "dashboard", icon: SquaresFour, label: "Dashboard" },
   { id: "perfil", icon: User, label: "Mi Perfil Parseado" },
+  { id: "curriculum", icon: FileText, label: "Curriculum" },
 ];
 
 export function SidebarCandidato({ activeTab, onTabChange, profile }) {
@@ -22,7 +22,10 @@ export function SidebarCandidato({ activeTab, onTabChange, profile }) {
 
   return (
     <aside className="w-72 bg-white border-r border-slate-200 hidden md:flex flex-col z-20">
-      <div className="p-6 border-b border-slate-100 flex items-center gap-3">
+      <div
+        onClick={() => router.push("/")}
+        className="p-6 border-b border-slate-100 flex items-center gap-3 cursor-pointer hover:bg-slate-50 transition"
+      >
         <div className="bg-blue-600 text-white p-1.5 rounded-lg">
           <Brain size={28} weight="bold" />
         </div>
@@ -52,10 +55,6 @@ export function SidebarCandidato({ activeTab, onTabChange, profile }) {
             </button>
           );
         })}
-        <button className="flex items-center gap-3 px-4 py-3 rounded-xl text-slate-600 hover:bg-slate-50 hover:text-slate-900 text-sm font-medium transition-all w-full text-left">
-          <ChartBar size={20} />
-          Analytics
-        </button>
       </nav>
 
       <div className="p-4 border-t border-slate-100">

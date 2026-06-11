@@ -1,13 +1,15 @@
 "use client";
 
-import { useEffect } from "react";
+import { Suspense, useEffect } from "react";
 import { ArrowLeft, CloudArrowUp } from "@phosphor-icons/react";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import { FileDropZone } from "@/components/ui/FileDropZone";
 import { getDataService } from "@/lib/dataService";
 
-export default function UploadPage() {
+function UploadContent() {
   const router = useRouter();
+  const searchParams = useSearchParams();
+  const isReplace = searchParams.get("replace") === "true";
 
   useEffect(() => {
     const user = getDataService().getCurrentUser();
@@ -17,6 +19,15 @@ export default function UploadPage() {
   }, [router]);
 
   const handleUpload = () => {
+    if (isReplace) {
+      const user = getDataService().getCurrentUser();
+      if (user) {
+        const profiles = JSON.parse(localStorage.getItem("perfiles_candidato") || "[]");
+        const idx = profiles.findIndex((p) => p.userId === user.id);
+        if (idx >= 0) profiles.splice(idx, 1);
+        localStorage.setItem("perfiles_candidato", JSON.stringify(profiles));
+      }
+    }
     router.push("/loading");
   };
 
@@ -35,15 +46,29 @@ export default function UploadPage() {
             <CloudArrowUp size={40} weight="duotone" />
           </div>
           <h2 className="text-3xl font-bold text-slate-900">
-            Analizar Currículum
+            {isReplace ? "Actualizar Currículum" : "Analizar Currículum"}
           </h2>
           <p className="text-slate-500 mt-2">
-            El motor spaCy + Transformers procesará tu documento.
+            {isReplace
+              ? "Tu perfil actual será reemplazado por el nuevo análisis."
+              : "El motor spaCy + Transformers procesará tu documento."}
           </p>
         </div>
 
         <FileDropZone onUpload={handleUpload} />
       </div>
     </div>
+  );
+}
+
+export default function UploadPage() {
+  return (
+    <Suspense fallback={
+      <div className="min-h-screen flex items-center justify-center bg-slate-50">
+        <div className="w-8 h-8 border-4 border-blue-500/30 border-t-blue-500 rounded-full animate-spin"></div>
+      </div>
+    }>
+      <UploadContent />
+    </Suspense>
   );
 }

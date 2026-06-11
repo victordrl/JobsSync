@@ -16,7 +16,10 @@ export function SidebarReclutador() {
 
   return (
     <aside className="w-72 bg-slate-900 text-white hidden md:flex flex-col z-20">
-      <div className="p-6 border-b border-slate-700 flex items-center gap-3">
+      <div
+        onClick={() => router.push("/")}
+        className="p-6 border-b border-slate-700 flex items-center gap-3 cursor-pointer hover:bg-slate-800 transition"
+      >
         <div className="bg-indigo-500 text-white p-1.5 rounded-lg">
           <Briefcase size={28} weight="bold" />
         </div>

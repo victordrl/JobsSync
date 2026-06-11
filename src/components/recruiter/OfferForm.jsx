@@ -51,6 +51,7 @@ export function OfferForm() {
   const [preguntaTipo, setPreguntaTipo] = useState("texto");
   const [preguntaOpciones, setPreguntaOpciones] = useState([]);
   const [opcionInput, setOpcionInput] = useState("");
+  const [preguntaTimeLimit, setPreguntaTimeLimit] = useState("");
 
   const handleChange = (e) => {
     setForm({ ...form, [e.target.name]: e.target.value });
@@ -98,10 +99,13 @@ export function OfferForm() {
     const t = (texto || preguntaTexto).trim();
     if (!t) return;
 
+    const timeLimit = preguntaTimeLimit ? parseInt(preguntaTimeLimit, 10) : null;
+
     const nueva = {
       id: `p-${Date.now()}`,
       texto: t,
       tipo: preguntaTipo,
+      timeLimit,
       ...(preguntaTipo === "multiple" && preguntaOpciones.length > 0 ? { opciones: [...preguntaOpciones] } : {}),
     };
 
@@ -109,6 +113,7 @@ export function OfferForm() {
     setPreguntaTexto("");
     setPreguntaOpciones([]);
     setOpcionInput("");
+    setPreguntaTimeLimit("");
     setShowPreguntasSuggestions(false);
   };
 
@@ -381,14 +386,19 @@ export function OfferForm() {
                 </span>
                 <div className="flex-1 min-w-0">
                   <p className="text-sm text-slate-800 font-medium">{p.texto}</p>
-                  <div className="flex items-center gap-2 mt-1">
-                    <span className="text-xs px-2 py-0.5 bg-slate-200 text-slate-600 rounded font-medium">
-                      {p.tipo === "texto" ? "Texto libre" : p.tipo === "si-no" ? "Sí / No" : "Opción múltiple"}
-                    </span>
-                    {p.opciones && p.opciones.length > 0 && (
-                      <span className="text-xs text-slate-500">{p.opciones.length} opciones</span>
-                    )}
-                  </div>
+                    <div className="flex items-center gap-2 mt-1">
+                      <span className="text-xs px-2 py-0.5 bg-slate-200 text-slate-600 rounded font-medium">
+                        {p.tipo === "texto" ? "Texto libre" : p.tipo === "si-no" ? "Sí / No" : "Opción múltiple"}
+                      </span>
+                      {p.timeLimit && (
+                        <span className="text-xs px-2 py-0.5 bg-amber-100 text-amber-700 rounded font-medium">
+                          {p.timeLimit} min
+                        </span>
+                      )}
+                      {p.opciones && p.opciones.length > 0 && (
+                        <span className="text-xs text-slate-500">{p.opciones.length} opciones</span>
+                      )}
+                    </div>
                 </div>
                 <button type="button" onClick={() => removePregunta(p.id)} className="flex-shrink-0 text-slate-400 hover:text-red-500 transition">
                   <X size={16} weight="bold" />
@@ -430,7 +440,7 @@ export function OfferForm() {
           )}
 
           <div className="flex gap-2">
-            <div className="relative flex-1">
+            <div className="relative flex-1 max-w-[180px]">
               <select
                 value={preguntaTipo}
                 onChange={(e) => setPreguntaTipo(e.target.value)}
@@ -441,6 +451,17 @@ export function OfferForm() {
                 <option value="multiple">Opción múltiple</option>
               </select>
               <CaretDown size={16} className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" />
+            </div>
+            <div className="flex items-center gap-1">
+              <input
+                type="number"
+                min="1"
+                value={preguntaTimeLimit}
+                onChange={(e) => setPreguntaTimeLimit(e.target.value)}
+                placeholder="Tiempo"
+                className="w-20 px-3 py-2.5 rounded-xl border border-slate-200 bg-slate-50 text-slate-800 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent transition"
+              />
+              <span className="text-xs text-slate-400 min">min</span>
             </div>
             <Button type="button" variant="primary" size="sm" onClick={() => addPregunta()} disabled={!preguntaTexto.trim()}>
               <Plus size={16} weight="bold" /> Agregar
