@@ -12,9 +12,31 @@ function UploadContent() {
   const isReplace = searchParams.get("replace") === "true";
 
   useEffect(() => {
-    const user = getDataService().getCurrentUser();
-    if (!user || user.rol !== "candidato") {
+    // 1. Intentamos obtener el usuario desde el dataService
+    let user = getDataService().getCurrentUser();
+    
+    // 2. Fallback estratégico: Si no está en memoria, lo pescamos del localStorage
+    if (!user && typeof window !== "undefined") {
+      const savedUser = localStorage.getItem("user");
+      if (savedUser) {
+        try {
+          user = JSON.parse(savedUser);
+          console.log("📦 [UPLOAD] Usuario recuperado exitosamente desde localStorage:", user);
+        } catch (e) {
+          console.error("❌ [UPLOAD ERROR] Error al parsear el usuario del localStorage", e);
+        }
+      }
+    }
+
+    // 3. Evaluar los permisos con la información recuperada
+    if (!user) {
+      console.warn("⚠️ [UPLOAD] No se encontró ninguna sesión activa. Rebotando a /login");
       router.replace("/login");
+    } else if (user.rol !== "candidato") {
+      console.warn(`⚠️ [UPLOAD] Acceso denegado. El rol "${user.rol}" no es 'candidato'. Rebotando a /login`);
+      router.replace("/login");
+    } else {
+      console.log("✅ [UPLOAD] Acceso concedido para el candidato:", user.email);
     }
   }, [router]);
 

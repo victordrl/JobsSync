@@ -1,24 +1,45 @@
 "use client";
 
+// Polyfill para habilitar crypto.randomUUID en redes locales HTTP (192.168.x.x)
+if (typeof window !== "undefined" && window.crypto && !window.crypto.randomUUID) {
+  window.crypto.randomUUID = function () {
+    return "xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx".replace(/[xy]/g, function (c) {
+      const r = (Math.random() * 16) | 0;
+      const v = c === "x" ? r : (r & 0x3) | 0x8;
+      return v.toString(16);
+    });
+  };
+}
+
 import { Suspense, useState, useEffect } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { Brain, User, Briefcase, Eye, EyeSlash, ArrowLeft } from "@phosphor-icons/react";
 import { useDataService } from "@/hooks/useDataService";
-import { createUser, ROLES } from "@/data/schemas";
+import { ROLES } from "@/data/schemas";
 
 function LoginForm() {
   const router = useRouter();
   const searchParams = useSearchParams();
-  const { db, login, register } = useDataService();
+  const { db } = useDataService(); 
   const [mode, setMode] = useState("login");
   const [showPassword, setShowPassword] = useState(false);
   const [error, setError] = useState("");
+  const [loading, setLoading] = useState(false);
   const [form, setForm] = useState({
     email: "",
     password: "",
     nombre: "",
     rol: ROLES.CANDIDATO,
   });
+
+  const [apiUrl, setApiUrl] = useState("http://localhost:8000/api");
+
+  useEffect(() => {
+    if (typeof window !== "undefined") {
+      const hostname = window.location.hostname;
+      setApiUrl(`http://${hostname}:8000/api`);
+    }
+  }, []);
 
   useEffect(() => {
     const rolHint = searchParams.get("rol");
@@ -32,7 +53,7 @@ function LoginForm() {
     setError("");
   };
 
-  const handleSubmit = (e) => {
+  const handleSubmit = async (e) => {
     e.preventDefault();
     setError("");
 
@@ -41,56 +62,128 @@ function LoginForm() {
       return;
     }
 
-    if (mode === "login") {
-      const user = login(form.email, form.password);
-      if (!user) {
-        setError("Credenciales inválidas.");
-        return;
-      }
-      redirectAfterLogin(user);
-    } else {
-      if (!form.nombre) {
-        setError("Completa todos los campos.");
-        return;
-      }
-      const user = register(
-        createUser({
-          email: form.email,
-          password: form.password,
-          nombre: form.nombre,
-          rol: form.rol,
-        })
-      );
-      if (!user) {
-        setError("El usuario ya existe.");
-        return;
-      }
-      if (form.rol === ROLES.CANDIDATO) {
-        router.push("/upload");
+    setLoading(true);
+    printLog("🚀 [PASO 1] Formulario enviado. Iniciando petición fetch a login...");
+
+    try {
+      if (mode === "login") {
+        const response = await fetch(`${apiUrl}/auth/login`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            email: form.email,
+            password: form.password,
+          }),
+        });
+
+        const data = await response.json();
+
+        if (!response.ok) {
+          throw new Error(data.detail || "Credenciales inválidas.");
+        }
+
+        printLog("🚨 [PASO 2] Respuesta de API recibida con éxito:", data);
+
+        localStorage.setItem("user", JSON.stringify(data));
+        printLog("💾 [PASO 3] Objeto 'user' inyectado en localStorage.");
+        
+        if (db && typeof db.setUser === "function") {
+          db.setUser(data);
+          printLog("🎯 [PASO 4] db.setUser asignado exitosamente en Contexto Global.");
+        } else {
+          printLog("⚠️ [ALERTA] 'db' o 'db.setUser' no existen en useDataService.");
+        }
+
+        printLog("🔀 [PASO 5] Invocando sub-rutina de redirección...");
+        await redirectAfterLogin(data);
+
       } else {
-        router.push("/dashboard/reclutador");
+        if (!form.nombre) {
+          setError("Completa todos los campos.");
+          setLoading(false);
+          return;
+        }
+
+        const response = await fetch(`${apiUrl}/auth/register`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            email: form.email,
+            password: form.password,
+            nombre: form.nombre,
+            rol: form.rol,
+          }),
+        });
+
+        const data = await response.json();
+
+        if (!response.ok) {
+          throw new Error(data.detail || "Error al procesar el registro.");
+        }
+
+        localStorage.setItem("user", JSON.stringify(data));
+
+        if (db && typeof db.setUser === "function") {
+          db.setUser(data);
+        }
+
+        if (form.rol === ROLES.CANDIDATO) {
+          router.push("/upload");
+        } else {
+          router.push("/dashboard/reclutador");
+        }
       }
+    } catch (err) {
+      printLog("❌ [ERROR DETECTADO] Excepción en handleSubmit:", err.message);
+      setError(err.message);
+    } finally {
+      setLoading(false);
     }
   };
 
-  const redirectAfterLogin = (user) => {
-    if (user.rol === ROLES.RECLUTADOR) {
-      router.push("/dashboard/reclutador");
-    } else {
-      const profile = db.getProfileByUserId(user.id);
-      if (profile) {
-        router.push("/dashboard/candidato");
+  const redirectAfterLogin = async (user) => {
+    const userRole = user.rol || user.role;
+    printLog(`🔍 [PASO 6] redirectAfterLogin activo. Rol detectado: "${userRole}"`);
+    
+    setTimeout(async () => {
+      if (userRole === ROLES.RECLUTADOR || userRole === "reclutador") {
+        printLog("➡️ [PASO 7-R] Ejecutando router.push('/dashboard/reclutador')");
+        router.push("/dashboard/reclutador");
       } else {
-        router.push("/upload");
+        try {
+          printLog(`📡 [PASO 7-C] Solicitando verificación de perfil a: ${apiUrl}/usuarios/${user.id}/perfil`);
+          const profileRes = await fetch(`${apiUrl}/usuarios/${user.id}/perfil`);
+          const profileData = await profileRes.json();
+
+          printLog("📦 [PASO 8-C] Respuesta de datos de perfil devuelta:", profileData);
+
+          if (profileRes.ok && profileData && (profileData.id || profileData.user_id) && !profileData.mensaje) {
+            printLog("➡️ [PASO 9-C] Perfil verificado existente. Ejecutando router.push('/dashboard/candidato')");
+            router.push("/dashboard/candidato");
+          } else {
+            printLog("➡️ [PASO 9-C] Sin perfil previo en DB. Redirigiendo a router.push('/upload')");
+            router.push("/upload");
+          }
+        } catch (err) {
+          printLog("❌ [ERROR] Falló validación de perfil remota. Forzando fallback a /upload:", err);
+          router.push("/upload");
+        }
       }
-    }
+    }, 100);
   };
+
+  // Función interna auxiliar para pintar logs claros
+  function printLog(title, content = "") {
+    console.log(`%c${title}`, "background: #1e293b; color: #38bdf8; padding: 4px 8px; rounded: 4px;", content);
+  }
 
   return (
     <div className="min-h-screen bg-slate-50 flex items-center justify-center p-6 relative">
       <button
         onClick={() => router.push("/role-selection")}
         className="absolute top-8 left-8 text-slate-500 hover:text-slate-900 flex items-center gap-2 transition"
+        disabled={loading}
+        type="button"
       >
         <ArrowLeft size={20} weight="bold" /> Volver
       </button>
@@ -104,9 +197,7 @@ function LoginForm() {
             {mode === "login" ? "Iniciar Sesión" : "Crear Cuenta"}
           </h2>
           <p className="text-slate-500 mt-2">
-            {mode === "login"
-              ? "Accede con tu email y contraseña"
-              : "Regístrate para comenzar"}
+            {mode === "login" ? "Accede con tu email y contraseña" : "Regístrate para comenzar"}
           </p>
         </div>
 
@@ -123,6 +214,7 @@ function LoginForm() {
                 value={form.nombre}
                 onChange={handleChange}
                 placeholder="Tu nombre"
+                disabled={loading}
                 className="w-full px-4 py-2.5 rounded-xl border border-slate-200 bg-slate-50 text-slate-800 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition"
               />
             </div>
@@ -136,6 +228,7 @@ function LoginForm() {
               value={form.email}
               onChange={handleChange}
               placeholder="tu@email.com"
+              disabled={loading}
               className="w-full px-4 py-2.5 rounded-xl border border-slate-200 bg-slate-50 text-slate-800 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition"
             />
           </div>
@@ -149,11 +242,13 @@ function LoginForm() {
                 value={form.password}
                 onChange={handleChange}
                 placeholder="••••••••"
+                disabled={loading}
                 className="w-full px-4 py-2.5 rounded-xl border border-slate-200 bg-slate-50 text-slate-800 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition pr-10"
               />
               <button
                 type="button"
                 onClick={() => setShowPassword(!showPassword)}
+                disabled={loading}
                 className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600"
               >
                 {showPassword ? <EyeSlash size={18} /> : <Eye size={18} />}
@@ -167,6 +262,7 @@ function LoginForm() {
               <div className="grid grid-cols-2 gap-3">
                 <button
                   type="button"
+                  disabled={loading}
                   onClick={() => setForm({ ...form, rol: ROLES.CANDIDATO })}
                   className={`flex items-center justify-center gap-2 p-3 rounded-xl border text-sm font-medium transition ${
                     form.rol === ROLES.CANDIDATO
@@ -178,6 +274,7 @@ function LoginForm() {
                 </button>
                 <button
                   type="button"
+                  disabled={loading}
                   onClick={() => setForm({ ...form, rol: ROLES.RECLUTADOR })}
                   className={`flex items-center justify-center gap-2 p-3 rounded-xl border text-sm font-medium transition ${
                     form.rol === ROLES.RECLUTADOR
@@ -197,9 +294,16 @@ function LoginForm() {
 
           <button
             type="submit"
-            className="w-full py-3 bg-linear-to-r from-blue-600 to-indigo-600 text-white rounded-xl font-bold shadow-lg hover:shadow-xl hover:scale-[1.02] transition-all text-sm"
+            disabled={loading}
+            className="w-full py-3 bg-linear-to-r from-blue-600 to-indigo-600 text-white rounded-xl font-bold shadow-lg hover:shadow-xl hover:scale-[1.02] transition-all text-sm flex items-center justify-center gap-2 disabled:opacity-75 disabled:scale-100"
           >
-            {mode === "login" ? "Entrar" : "Crear Cuenta"}
+            {loading ? (
+              <div className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin"></div>
+            ) : mode === "login" ? (
+              "Entrar"
+            ) : (
+              "Crear Cuenta"
+            )}
           </button>
 
           <p className="text-center text-sm text-slate-500">
@@ -208,8 +312,9 @@ function LoginForm() {
                 ¿No tienes cuenta?{" "}
                 <button
                   type="button"
+                  disabled={loading}
                   onClick={() => { setMode("register"); setError(""); }}
-                  className="text-blue-600 font-semibold hover:underline"
+                  className="text-blue-600 font-semibold hover:underline disabled:no-underline"
                 >
                   Regístrate
                 </button>
@@ -219,8 +324,9 @@ function LoginForm() {
                 ¿Ya tienes cuenta?{" "}
                 <button
                   type="button"
+                  disabled={loading}
                   onClick={() => { setMode("login"); setError(""); }}
-                  className="text-blue-600 font-semibold hover:underline"
+                  className="text-blue-600 font-semibold hover:underline disabled:no-underline"
                 >
                   Inicia sesión
                 </button>
@@ -228,27 +334,27 @@ function LoginForm() {
             )}
           </p>
 
-          {mode === "login" && (
-            <div className="pt-4 border-t border-slate-100">
-              <p className="text-xs text-slate-400 text-center mb-3">Demo — credenciales de prueba</p>
-              <div className="grid grid-cols-2 gap-2 text-xs">
-                <button
-                  type="button"
-                  onClick={() => setForm({ email: "admin", password: "admin" })}
-                  className="p-2 bg-slate-50 rounded-lg text-slate-600 hover:bg-slate-100 transition text-left"
-                >
-                  <span className="font-semibold">Admin:</span> admin / admin
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setForm({ email: "carlos", password: "carlos" })}
-                  className="p-2 bg-slate-50 rounded-lg text-slate-600 hover:bg-slate-100 transition text-left"
-                >
-                  <span className="font-semibold">Candidato:</span> carlos / carlos
-                </button>
-              </div>
+          <div className="pt-4 border-t border-slate-100">
+            <p className="text-xs text-slate-400 text-center mb-3">Demo — credenciales de prueba</p>
+            <div className="grid grid-cols-2 gap-2 text-xs">
+              <button
+                type="button"
+                disabled={loading}
+                onClick={() => setForm({ email: "admin", password: "admin" })}
+                className="p-2 bg-slate-50 rounded-lg text-slate-600 hover:bg-slate-100 transition text-left"
+              >
+                <span className="font-semibold">Admin:</span> admin / admin
+              </button>
+              <button
+                type="button"
+                disabled={loading}
+                onClick={() => setForm({ email: "carlos", password: "carlos" })}
+                className="p-2 bg-slate-50 rounded-lg text-slate-600 hover:bg-slate-100 transition text-left"
+              >
+                <span className="font-semibold">Candidato:</span> carlos / carlos
+              </button>
             </div>
-          )}
+          </div>
         </form>
       </div>
     </div>
